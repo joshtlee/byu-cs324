@@ -106,6 +106,116 @@ int main(int argc, char **argv)
 */
 void eval(char *cmdline) 
 {
+    char *argv[MAXLINE];
+    int cmds[MAXLINE];
+    int stdin_redir[MAXLINE];
+    int stdout_redir[MAXLINE];
+    char buffer[100];
+    int nbytes;
+
+    parseline(cmdline,argv);
+    int size = parseargs(argv,cmds,stdin_redir,stdout_redir);
+    printf("%d",size);
+    builtin_cmd(argv);
+
+    if(size == 1){
+        int pid = fork();
+        if(pid == 0){
+        if (stdin_redir[0] != -1) {
+            int fd = fileno(fopen(argv[stdin_redir[0]], "r"));
+            dup2(fd, 0);
+            close(fd);
+        }
+        if (stdout_redir[0] != -1) {
+            int fd = fileno(fopen(argv[stdout_redir[0]], "w"));
+            dup2(fd, 1);
+            close(fd);
+        }
+        execve(argv[cmds[0]], &argv[cmds[0]], NULL);
+    }else {
+        // parent process
+        setpgid(pid, pid);
+        waitpid(pid, NULL, 0);
+        }
+    }
+    else{
+        printf("%s",argv[cmds[0]]); 
+        fflush(stdout); 
+
+        int pipe_fd[2];
+        pid_t pid1, pid2;
+        if (pipe(pipe_fd) < 0) {
+            perror("pipe");
+        }
+
+        // Create first child process
+        pid1 = fork();
+        if(pid1 != 0){
+            pid2 = fork();
+
+        }
+        //setpgid(pid1, pid1);
+        //setpgid(pid2, pid1);
+        if (pid1 == 0) {
+            printf("in child one");
+            if (stdin_redir[0] != -1) {
+                int fd = fileno(fopen(argv[stdin_redir[0]], "r"));
+                dup2(fd, 0);
+                close(fd);
+            }
+            if (stdout_redir[0] != -1) {
+                int fd = fileno(fopen(argv[stdout_redir[0]], "w"));
+                dup2(fd, 1);
+                close(fd);
+            }                   
+            dup2(pipe_fd[1], 1);
+            close(pipe_fd[0]);
+            printf("%s",argv[cmds[0]]); 
+            fflush(stdout); 
+            // Execute first command
+            execve(argv[cmds[0]], &argv[cmds[0]], NULL);
+        } 
+        else if(pid2 == 0){
+
+            if (stdin_redir[0] != -1) {
+                int fd = fileno(fopen(argv[stdin_redir[0]], "r"));
+                dup2(fd, 0);
+                close(fd);
+            }    
+            
+            if (stdout_redir[0] != -1) {
+                int fd = fileno(fopen(argv[stdout_redir[1]], "w"));
+                dup2(fd, 1);
+                close(fd);
+            }      
+            
+            dup2(pipe_fd[0], 0);
+            close(pipe_fd[0]);
+            // Execute second command
+            printf("%s",argv[cmds[1]]); 
+            fflush(stdout);   
+            execve(argv[cmds[1]], &argv[cmds[1]], NULL);
+        }else{
+            waitpid(pid1,NULL,0);
+            waitpid(pid2,NULL,0);
+            close(pipe_fd[0]);
+            close(pipe_fd[1]);
+
+        }
+
+    }
+
+
+
+    
+        
+        
+    
+    
+    
+    
+  
+
     return;
 }
 
@@ -233,6 +343,9 @@ int parseline(const char *cmdline, char **argv)
  */
 int builtin_cmd(char **argv) 
 {
+    if(strcmp(argv[0],"quit") == 0){
+        exit(0);
+    }
     return 0;     /* not a builtin command */
 }
 
@@ -269,4 +382,3 @@ void app_error(char *msg)
     fprintf(stdout, "%s\n", msg);
     exit(1);
 }
-
